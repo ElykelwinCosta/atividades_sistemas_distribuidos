@@ -1,38 +1,45 @@
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
+import java.util.List;
 
-class ClientHandler extends Thread {
-    DataInputStream in;
-    DataOutputStream out;
-    Socket clientSocket;
+public class ClientHandler extends Thread {
+    private Socket socket;
+    private DataInputStream input;
+    private DataOutputStream output;
+    private List<Socket> clients;
+    private List<DataOutputStream> clientOutputs;
 
-    public ClientHandler(Socket aClientSocket) {
-        try {
-            clientSocket = aClientSocket;
-            in = new DataInputStream(clientSocket.getInputStream());
-            out = new DataOutputStream(clientSocket.getOutputStream());
-        } catch (IOException e) {
-            System.out.println("Connection:" + e.getMessage());
-        }
+    public ClientHandler(Socket socket, List<Socket> clients, List<DataOutputStream> clientOutputs) throws IOException {
+        this.socket = socket;
+        this.clients = clients;
+        this.clientOutputs = clientOutputs;
+        input = new DataInputStream(socket.getInputStream());
+        output = new DataOutputStream(socket.getOutputStream());
     }
 
+    @Override
     public void run() {
-        try { // an echo server
-            String data = in.readUTF(); // read a line of data from the stream
-            System.out.println("Mensagem recebida: " + data);
-            out.writeUTF(data.toUpperCase());
-        } catch (EOFException e) {
-            System.out.println("EOF:" + e.getMessage());
+        try {
+            while (true) {
+                String msg = input.readUTF();
+                System.out.println("[S4] Mensagem recebida de " + socket.getRemoteSocketAddress() + ": " + msg);
+
+                // Encaminhar a mensagem para todos os clientes conectados
+                for (DataOutputStream clientOutput : clientOutputs) {
+                    clientOutput.writeUTF(msg);
+                    clientOutput.flush(); // Garantir que a mensagem seja enviada imediatamente
+                }
+            }
         } catch (IOException e) {
-            System.out.println("readline:" + e.getMessage());
-        } finally {
+            // Lidar com a desconexão do cliente
+            System.out.println("Cliente " + socket.getRemoteSocketAddress() + " desconectado.");
+            clients.remove(socket);
+            clientOutputs.remove(output);
             try {
-                clientSocket.close();
-            } catch (IOException e) {
-                /* close failed */}
+                socket.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
         }
     }
 }
